@@ -109,9 +109,9 @@ class Changeset:
                 s.files[x]['version'] != d.files[x]['version'] or \
                 s.files[x]['checksum']!= d.files[x]['checksum']])
 
-def getVerInfo(os,arch):
+def getVerInfo(os,arch,masterserver):
     details = urlencode({'version' : '0.0.0.0', 'os' : os ,'arch' : arch}).encode('utf8')
-    url = Request('http://masterserver.hon.s2games.com/patcher/patcher.php',details)
+    url = Request('http://{0}/patcher/patcher.php'.format(masterserver),details)
     url.add_header("User-Agent",USER_AGENT)
     data = urlopen(url).read().decode("utf8", 'ignore') 
     d = unserialize(data)
@@ -271,6 +271,8 @@ parser.add_argument("--arch",dest="arch",help="arch to fetch files for, used if 
 parser.add_argument("--resume",dest="resume",help="resume downloading, makes sense with non-empty tmpdir",action="store_true",default=False)
 parser.add_argument("--fetchthreads",dest="fetchthreads",type=int,help="number of threads to use when fetching files",default=4)
 parser.add_argument("--retry-count",dest="retrycount",type=int,help="retry count for failed downloads",default=5)
+parser.add_argument("-m","--masterserver", dest="masterserver", help="masterserver to use",default='masterserver.hon.s2games.com')
+
 options = parser.parse_args()
 
 import signal,os
@@ -296,7 +298,7 @@ else:
 if not curManifest:
     exit(1)
 
-verinfo = getVerInfo(curManifest.os,curManifest.arch)
+verinfo = getVerInfo(curManifest.os,curManifest.arch,options.masterserver)
 if options.destver:
     destver = options.destver
 else:
