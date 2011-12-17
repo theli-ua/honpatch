@@ -139,6 +139,17 @@ def copyDir(s,d):
                 shutil.copytree(src,dst)
         else:
             shutil.copy(src,dst)
+def fetch_single(baseurl,baseurl2,version,path,fetchdir,retrycount):
+    parsedurl = urlparse(baseurl)
+    parsedurl2 = urlparse(baseurl2)
+    conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
+    conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
+
+    res = fetch(conn,conn2,retrycount,baseurl,fetchdir,version,path):
+    conn.close()
+    conn2.close()
+    return res
+
 
 def fetch(conn,conn2,retrycount,url,tempdir,version,path):
     #url.add_header("User-Agent",USER_AGENT)
@@ -335,16 +346,20 @@ def main():
     print('Using base url2: {0}'.format(baseurl2))
 
     if not options.nofetch:
-        parsedurl = urlparse(baseurl)
-        parsedurl2 = urlparse(baseurl)
-        conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
-        conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
+        #parsedurl = urlparse(baseurl)
+        #parsedurl2 = urlparse(baseurl2)
+        #conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
+        #conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
 
-        if not fetch(conn,conn2,options.retrycount,baseurl,fetchdir,destver,'manifest.xml'):
+        #if not fetch(conn,conn2,options.retrycount,baseurl,fetchdir,destver,'manifest.xml'):
+            #print("Error fetching manifest.xml")
+            #exit(1)
+        #conn.close()
+        #conn2.close()
+        #def fetch_single(baseurl,baseurl2,version,path,fetchdir,retrycount):
+        if not fetch_single(baseurl,baseurl2,destver,'manifest.xml',fetchdir,options.retrycount):
             print("Error fetching manifest.xml")
             exit(1)
-        conn.close()
-        conn2.close()
 
     mz = CoolZip(os.path.join(fetchdir,'manifest.xml.zip'))
     newManifest = Manifest(xmlstring=mz.read('manifest.xml').decode("utf8", 'ignore'))
