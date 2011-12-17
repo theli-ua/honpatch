@@ -254,239 +254,241 @@ class FetchThread( Thread ):
             q.task_done()
         self.conn.close()
         self.conn2.close()
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='HoN Patcher')
+    parser.add_argument("-t","--tmpdir", dest="tmpdir", help="directory used for temporary files, needs to have patch_size+hon_size space, defaults to OS default")
+    parser.add_argument("-s","--hondir", dest="hondir",help="source HoN directory, if you do not set this you need to set --os and --arch to patch from 'empty' version")
+    parser.add_argument('-d','--destdir',dest='destdir',help="destination directory, if is not set defaults to source")
+    parser.add_argument("-v","--to-version", dest="destver",help="destination version, defaults to latest available")
+    parser.add_argument("-l","--list",action="store_true", dest="list", default=False,help="list changes between versions")
+    parser.add_argument("--nofetch",action="store_true",dest="nofetch",default=False,help="skip fetching files(if you have already fetched them somehow f.e.)")
+    parser.add_argument("--noapply",action="store_true",dest="noapply",default=False,help="skip applying patch")
+    parser.add_argument("--no-cleanup",action="store_true",dest="nocleanup",default=False,help="do not cleanup temporary directory")
+    parser.add_argument("--no-perm-copy",action="store_true",dest="noperm",default=False,help="do not copy permissions from files in source directory")
+    parser.add_argument("--os",dest="os",help="os to fetch files for, used if source directory is not set")
+    parser.add_argument("--arch",dest="arch",help="arch to fetch files for, used if source directory is not set")
+    parser.add_argument("--resume",dest="resume",help="resume downloading, makes sense with non-empty tmpdir",action="store_true",default=False)
+    parser.add_argument("--fetchthreads",dest="fetchthreads",type=int,help="number of threads to use when fetching files",default=4)
+    parser.add_argument("--retry-count",dest="retrycount",type=int,help="retry count for failed downloads",default=5)
+    parser.add_argument("-m","--masterserver", dest="masterserver", help="masterserver to use",default='masterserver.hon.s2games.com')
 
-import argparse
-parser = argparse.ArgumentParser(description='HoN Patcher')
-parser.add_argument("-t","--tmpdir", dest="tmpdir", help="directory used for temporary files, needs to have patch_size+hon_size space, defaults to OS default")
-parser.add_argument("-s","--hondir", dest="hondir",help="source HoN directory, if you do not set this you need to set --os and --arch to patch from 'empty' version")
-parser.add_argument('-d','--destdir',dest='destdir',help="destination directory, if is not set defaults to source")
-parser.add_argument("-v","--to-version", dest="destver",help="destination version, defaults to latest available")
-parser.add_argument("-l","--list",action="store_true", dest="list", default=False,help="list changes between versions")
-parser.add_argument("--nofetch",action="store_true",dest="nofetch",default=False,help="skip fetching files(if you have already fetched them somehow f.e.)")
-parser.add_argument("--noapply",action="store_true",dest="noapply",default=False,help="skip applying patch")
-parser.add_argument("--no-cleanup",action="store_true",dest="nocleanup",default=False,help="do not cleanup temporary directory")
-parser.add_argument("--no-perm-copy",action="store_true",dest="noperm",default=False,help="do not copy permissions from files in source directory")
-parser.add_argument("--os",dest="os",help="os to fetch files for, used if source directory is not set")
-parser.add_argument("--arch",dest="arch",help="arch to fetch files for, used if source directory is not set")
-parser.add_argument("--resume",dest="resume",help="resume downloading, makes sense with non-empty tmpdir",action="store_true",default=False)
-parser.add_argument("--fetchthreads",dest="fetchthreads",type=int,help="number of threads to use when fetching files",default=4)
-parser.add_argument("--retry-count",dest="retrycount",type=int,help="retry count for failed downloads",default=5)
-parser.add_argument("-m","--masterserver", dest="masterserver", help="masterserver to use",default='masterserver.hon.s2games.com')
+    options = parser.parse_args()
 
-options = parser.parse_args()
+    import signal,os
 
-import signal,os
-
-signal.signal(signal.SIGINT, cleanup_callback)
-signal.signal(signal.SIGTERM, cleanup_callback)
+    signal.signal(signal.SIGINT, cleanup_callback)
+    signal.signal(signal.SIGTERM, cleanup_callback)
 
 
-curManifest = None
-if options.hondir:
-    mpath = os.path.join(options.hondir,'manifest.xml')
-    if os.path.exists(mpath):
-        curManifest = Manifest(xmlpath=mpath)
+    curManifest = None
+    if options.hondir:
+        mpath = os.path.join(options.hondir,'manifest.xml')
+        if os.path.exists(mpath):
+            curManifest = Manifest(xmlpath=mpath)
+        else:
+            print ('manifest.xml not found in {0}'.format(parser.hondir))
     else:
-        print ('manifest.xml not found in {0}'.format(parser.hondir))
-else:
-    print('Source directory not set this will be a LOOONG time')
-    if not options.os or not options.arch or not options.destdir:
-        print('You NEED to set arch,os and destination dir if source directory is not set')
-    else:
-        curManifest = Manifest(os=options.os,arch=options.arch)
+        print('Source directory not set this will be a LOOONG time')
+        if not options.os or not options.arch or not options.destdir:
+            print('You NEED to set arch,os and destination dir if source directory is not set')
+        else:
+            curManifest = Manifest(os=options.os,arch=options.arch)
 
-if not curManifest:
-    exit(1)
-
-verinfo = getVerInfo(curManifest.os,curManifest.arch,options.masterserver)
-if options.destver:
-    destver = options.destver
-else:
-    destver = verinfo['version']
-
-destdir = options.destdir
-if not options.destdir:
-    destdir = options.hondir
-
-if destver != verinfo['version']:
-    print('Warning! {0} is not the latest version ({1})'.format(destver,verinfo['version']))
-
-if curManifest.version == destver:
-    print('{0} == {1}, nothing to update'.format(curManifest.version,destver))
-    exit(0)
-
-print('Doing upgrade from source dir "{0}" to destination "{1}",\n\t version {2} => {3}'.format(options.hondir,destdir,curManifest.version,destver))
-
-print('Fetching manifest.xml for {0}'.format(destver))
-
-tempdir = options.tmpdir
-
-if not tempdir:
-    import tempfile
-    tempdir = tempfile.mkdtemp()
-fetchdir = os.path.join(tempdir,'honpatch')
-cleanupdir = tempdir
-tempdir = os.path.join(tempdir,'hon')
-print('Using {0} as the temporary directory'.format(tempdir))
-baseurl = verinfo[0]['url'] + verinfo[0]['os'] + '/' + verinfo[0]['arch'] + '/'
-baseurl2 = verinfo[0]['url2'] + verinfo[0]['os'] + '/' + verinfo[0]['arch'] + '/'
-
-print('Using base url: {0}'.format(baseurl))
-print('Using base url2: {0}'.format(baseurl2))
-
-if not options.nofetch:
-    parsedurl = urlparse(baseurl)
-    parsedurl2 = urlparse(baseurl)
-    conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
-    conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
-
-    if not fetch(conn,conn2,options.retrycount,baseurl,fetchdir,destver,'manifest.xml'):
-        print("Error fetching manifest.xml")
+    if not curManifest:
         exit(1)
-    conn.close()
-    conn2.close()
 
-mz = CoolZip(os.path.join(fetchdir,'manifest.xml.zip'))
-newManifest = Manifest(xmlstring=mz.read('manifest.xml').decode("utf8", 'ignore'))
-mz.close()
+    verinfo = getVerInfo(curManifest.os,curManifest.arch,options.masterserver)
+    if options.destver:
+        destver = options.destver
+    else:
+        destver = verinfo['version']
 
-if curManifest.version == newManifest.version:
-    print('{0} == {1}, nothing to update'.format(curManifest.version,newManifest.version))
-    exit(0)
+    destdir = options.destdir
+    if not options.destdir:
+        destdir = options.hondir
 
-changeSet = Changeset(curManifest,newManifest)
-import sys
-if options.list:
-    print('Listing changes between versions:\n')
-    print('Deleted files:')
-    for i in sorted(changeSet.dels):
-        print('\t{0}'.format(i))
-    print('New files:')
-    for i in sorted(changeSet.adds):
-        print('\t{0}'.format(i))
-    print('Modified files:')
-    for i in sorted(changeSet.changes):
-        print('\t{0}'.format(i))
-print('')
+    if destver != verinfo['version']:
+        print('Warning! {0} is not the latest version ({1})'.format(destver,verinfo['version']))
 
-prevlen = 1
-tofetch = changeSet.adds | changeSet.changes
-if not options.nofetch:
-    print('Fetching files using {0} threads'.format(options.fetchthreads))
-    queue = Queue()
-    resume = options.resume
-    for f in tofetch:
-        v = newManifest.files[f]['version']
-        path = os.path.join(fetchdir,f + '.zip')
-        if not resume or not os.path.exists(path) or os.path.getsize(path) != int(newManifest.files[f]['zipsize']):
-            queue.put((baseurl,fetchdir,v,f))
+    if curManifest.version == destver:
+        print('{0} == {1}, nothing to update'.format(curManifest.version,destver))
+        exit(0)
 
-    parsedurl = urlparse(baseurl)
-    parsedurl2 = urlparse(baseurl2)
-    status = Value('b',0)  
+    print('Doing upgrade from source dir "{0}" to destination "{1}",\n\t version {2} => {3}'.format(options.hondir,destdir,curManifest.version,destver))
 
-    for _ in range(options.fetchthreads):
+    print('Fetching manifest.xml for {0}'.format(destver))
+
+    tempdir = options.tmpdir
+
+    if not tempdir:
+        import tempfile
+        tempdir = tempfile.mkdtemp()
+    fetchdir = os.path.join(tempdir,'honpatch')
+    cleanupdir = tempdir
+    tempdir = os.path.join(tempdir,'hon')
+    print('Using {0} as the temporary directory'.format(tempdir))
+    baseurl = verinfo[0]['url'] + verinfo[0]['os'] + '/' + verinfo[0]['arch'] + '/'
+    baseurl2 = verinfo[0]['url2'] + verinfo[0]['os'] + '/' + verinfo[0]['arch'] + '/'
+
+    print('Using base url: {0}'.format(baseurl))
+    print('Using base url2: {0}'.format(baseurl2))
+
+    if not options.nofetch:
+        parsedurl = urlparse(baseurl)
+        parsedurl2 = urlparse(baseurl)
         conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
         conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
-        FetchThread(conn,conn2,queue,options.retrycount,status).start()
-    total = len(tofetch)
-    filler = ' '*20
-    while not queue.empty() and status.value == 0:
-        sys.stdout.write('{0}\rDone {1}/{2}\r'.format(filler,total-queue.qsize(),total))
-        sys.stdout.flush()
-        sleep(1)
-    if status.value != 0:
-        print('\n\nCould not fetch all files, exitting')
-        exit(1)        
-    queue.join()
-    print('\n Fetching done.')
-else:
-    print('Not actually fetching anything')
 
-if not options.noapply:
-    print("Temporary applying patch to {0}".format(tempdir))
-    files = sorted(newManifest.files.keys())
-    files.append('manifest.xml')
-    tofetch |= frozenset(['manifest.xml'])
-    total = len(files)
-    current = 1
+        if not fetch(conn,conn2,options.retrycount,baseurl,fetchdir,destver,'manifest.xml'):
+            print("Error fetching manifest.xml")
+            exit(1)
+        conn.close()
+        conn2.close()
+
+    mz = CoolZip(os.path.join(fetchdir,'manifest.xml.zip'))
+    newManifest = Manifest(xmlstring=mz.read('manifest.xml').decode("utf8", 'ignore'))
+    mz.close()
+
+    if curManifest.version == newManifest.version:
+        print('{0} == {1}, nothing to update'.format(curManifest.version,newManifest.version))
+        exit(0)
+
+    changeSet = Changeset(curManifest,newManifest)
+    import sys
+    if options.list:
+        print('Listing changes between versions:\n')
+        print('Deleted files:')
+        for i in sorted(changeSet.dels):
+            print('\t{0}'.format(i))
+        print('New files:')
+        for i in sorted(changeSet.adds):
+            print('\t{0}'.format(i))
+        print('Modified files:')
+        for i in sorted(changeSet.changes):
+            print('\t{0}'.format(i))
+    print('')
+
     prevlen = 1
-    s2z = {}
-    s2z_source = {}
-    for f in files:
-        sys.stdout.write('{1}\rProcessing [{2}/{3}]{0}\r'.format(f,' '*prevlen,current,total))
-        sys.stdout.flush()
-        prevlen = len(f) + 30
-        current += 1
+    tofetch = changeSet.adds | changeSet.changes
+    if not options.nofetch:
+        print('Fetching files using {0} threads'.format(options.fetchthreads))
+        queue = Queue()
+        resume = options.resume
+        for f in tofetch:
+            v = newManifest.files[f]['version']
+            path = os.path.join(fetchdir,f + '.zip')
+            if not resume or not os.path.exists(path) or os.path.getsize(path) != int(newManifest.files[f]['zipsize']):
+                queue.put((baseurl,fetchdir,v,f))
 
-        path = f.split('.s2z/')
-        if f in tofetch:
-            z = CoolZip(os.path.join(fetchdir,f + '.zip'))
-            if len(path) == 1:
-                try:
-                    data = z.read(os.path.basename(f))
-                except:
-                    data = z.read(os.path.basename(f.lower()))
+        parsedurl = urlparse(baseurl)
+        parsedurl2 = urlparse(baseurl2)
+        status = Value('b',0)  
+
+        for _ in range(options.fetchthreads):
+            conn = HTTPConnection(parsedurl.hostname,port=parsedurl.port)
+            conn2 = HTTPConnection(parsedurl2.hostname,port=parsedurl2.port)
+            FetchThread(conn,conn2,queue,options.retrycount,status).start()
+        total = len(tofetch)
+        filler = ' '*20
+        while not queue.empty() and status.value == 0:
+            sys.stdout.write('{0}\rDone {1}/{2}\r'.format(filler,total-queue.qsize(),total))
+            sys.stdout.flush()
+            sleep(1)
+        if status.value != 0:
+            print('\n\nCould not fetch all files, exitting')
+            exit(1)        
+        queue.join()
+        print('\n Fetching done.')
+    else:
+        print('Not actually fetching anything')
+
+    if not options.noapply:
+        print("Temporary applying patch to {0}".format(tempdir))
+        files = sorted(newManifest.files.keys())
+        files.append('manifest.xml')
+        tofetch |= frozenset(['manifest.xml'])
+        total = len(files)
+        current = 1
+        prevlen = 1
+        s2z = {}
+        s2z_source = {}
+        for f in files:
+            sys.stdout.write('{1}\rProcessing [{2}/{3}]{0}\r'.format(f,' '*prevlen,current,total))
+            sys.stdout.flush()
+            prevlen = len(f) + 30
+            current += 1
+
+            path = f.split('.s2z/')
+            if f in tofetch:
+                z = CoolZip(os.path.join(fetchdir,f + '.zip'))
+                if len(path) == 1:
+                    try:
+                        data = z.read(os.path.basename(f))
+                    except:
+                        data = z.read(os.path.basename(f.lower()))
+                else:
+                    try:
+                        data = z.read_raw(os.path.basename(f))
+                    except:
+                        data = z.read_raw(os.path.basename(f.lower()))
+                z.close()
             else:
-                try:
-                    data = z.read_raw(os.path.basename(f))
-                except:
-                    data = z.read_raw(os.path.basename(f.lower()))
-            z.close()
-        else:
+                if len(path) == 1:
+                    try:
+                        _raw_file = open(os.path.join(options.hondir,f),'rb')
+                        data = _raw_file.read()
+                        _raw_file.close()
+                    except:
+                        print('Could not read {0}'.format(os.path.join(options.hondir,f)))
+                        data = bytes()
+                else:
+                    if path[0] not in s2z_source:
+                        s2z_source[path[0]] = \
+                            CoolZip(os.path.join(options.hondir,path[0] + '.s2z'))
+                    data = s2z_source[path[0]].read_raw(path[1])
+
+            #now that we have data we need to insert it into proper place
+
             if len(path) == 1:
-                try:
-                    _raw_file = open(os.path.join(options.hondir,f),'rb')
-                    data = _raw_file.read()
-                    _raw_file.close()
-                except:
-                    print('Could not read {0}'.format(os.path.join(options.hondir,f)))
-                    data = bytes()
-            else:
-                if path[0] not in s2z_source:
-                    s2z_source[path[0]] = \
-                        CoolZip(os.path.join(options.hondir,path[0] + '.s2z'))
-                data = s2z_source[path[0]].read_raw(path[1])
-
-        #now that we have data we need to insert it into proper place
-
-        if len(path) == 1:
-            path = os.path.join(tempdir,f)
-            dpath = os.path.dirname(path)
-            if not os.path.exists(dpath):
-                os.makedirs(dpath)
-            _dest_file = open(path,'wb')
-            _dest_file.write(data)
-            _dest_file.close()
-        else:
-            if path[0] not in s2z:
-                dpath = os.path.dirname(os.path.join(tempdir,path[0]))
+                path = os.path.join(tempdir,f)
+                dpath = os.path.dirname(path)
                 if not os.path.exists(dpath):
                     os.makedirs(dpath)
-                z = CoolZip(os.path.join(tempdir,path[0] + '.s2z'),'w',zipfile.ZIP_DEFLATED)
-                s2z[path[0]] = z
-            s2z[path[0]].add_raw(path[1],*data)
-    print('')
-    print('Closing s2z archives')
-    del s2z
-    del s2z_source
-
-if options.hondir and not options.noperm and not options.noapply:
-    print('Copying permissions from {0}'.format(options.hondir))
-    copyPerm(options.hondir,tempdir)
-
-if not options.noapply:
-    print('Copying new version to {0}'.format(destdir))
-    copyDir(tempdir,destdir)
-
-if not options.nocleanup:
-    if options.tmpdir:
-        for i in os.listdir(options.tmpdir):
-            item = os.path.join(options.tmpdir,i)
-            if os.path.isdir(item):
-                shutil.rmtree(item)
+                _dest_file = open(path,'wb')
+                _dest_file.write(data)
+                _dest_file.close()
             else:
-                os.unlink(item)
-    else:
-        shutil.rmtree(cleanupdir)
-print('done')
+                if path[0] not in s2z:
+                    dpath = os.path.dirname(os.path.join(tempdir,path[0]))
+                    if not os.path.exists(dpath):
+                        os.makedirs(dpath)
+                    z = CoolZip(os.path.join(tempdir,path[0] + '.s2z'),'w',zipfile.ZIP_DEFLATED)
+                    s2z[path[0]] = z
+                s2z[path[0]].add_raw(path[1],*data)
+        print('')
+        print('Closing s2z archives')
+        del s2z
+        del s2z_source
+
+    if options.hondir and not options.noperm and not options.noapply:
+        print('Copying permissions from {0}'.format(options.hondir))
+        copyPerm(options.hondir,tempdir)
+
+    if not options.noapply:
+        print('Copying new version to {0}'.format(destdir))
+        copyDir(tempdir,destdir)
+
+    if not options.nocleanup:
+        if options.tmpdir:
+            for i in os.listdir(options.tmpdir):
+                item = os.path.join(options.tmpdir,i)
+                if os.path.isdir(item):
+                    shutil.rmtree(item)
+                else:
+                    os.unlink(item)
+        else:
+            shutil.rmtree(cleanupdir)
+    print('done')
+if __name__ == '__main__':
+    main()
