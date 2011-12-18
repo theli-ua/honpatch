@@ -326,7 +326,7 @@ def main():
         print('{0} == {1}, nothing to update'.format(curManifest.version,destver))
         exit(0)
 
-    print('Doing upgrade from source dir "{0}" to destination "{1}",\n\t version {2} => {3}'.format(options.hondir,destdir,curManifest.version,destver))
+    print('Upgrading from source dir "{0}" to destination "{1}",\n\t version {2} => {3}'.format(options.hondir,destdir,curManifest.version,destver))
 
     print('Fetching manifest.xml for {0}'.format(destver))
 
