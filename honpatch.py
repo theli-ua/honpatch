@@ -226,6 +226,7 @@ class CoolZip (zipfile.ZipFile):
             zef_file.read(fheader[zipfile._FH_EXTRA_FIELD_LENGTH])
         return (zinfo,zef_file.read(zinfo.compress_size))
     def add_raw(self,path,zinfo,data):
+        self._didModify = True
         zinfo.header_offset = self.fp.tell()    # Start of header data
         zinfo.filename = path
         self.fp.write(zinfo.FileHeader())
