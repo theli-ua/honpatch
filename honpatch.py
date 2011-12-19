@@ -266,8 +266,16 @@ class FetchThread( Thread ):
         self.conn.close()
         self.conn2.close()
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description='HoN Patcher')
+    try:
+        import argparse
+        have_argparse = True
+        parser = argparse.ArgumentParser(description='HoN Patcher')
+    except:
+        import optparse
+        have_argparse = False
+        parser = optparse.OptionParser(description='HoN Patcher')
+        parser.add_argument = parser.add_option
+
     parser.add_argument("-t","--tmpdir", dest="tmpdir", help="directory used for temporary files, needs to have patch_size+hon_size space, defaults to OS default")
     parser.add_argument("-s","--hondir", dest="hondir",help="source HoN directory, if you do not set this you need to set --os and --arch to patch from 'empty' version")
     parser.add_argument('-d','--destdir',dest='destdir',help="destination directory, if is not set defaults to source")
@@ -285,6 +293,8 @@ def main():
     parser.add_argument("-m","--masterserver", dest="masterserver", help="masterserver to use",default='masterserver.hon.s2games.com')
 
     options = parser.parse_args()
+    if not have_argparse:
+        options = options[0]
 
     import signal,os
 
