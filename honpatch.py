@@ -346,6 +346,13 @@ def main():
     if not tempdir:
         import tempfile
         tempdir = tempfile.mkdtemp()
+    _neededGB = 1.5
+    s = os.statvfs(tempdir)
+    if (s.f_bavail * s.f_frsize) / ( pow(1024,3) ) < _neededGB:
+        print('Not enough free space at {0}, need at least {1}GB'.format(tempdir,_neededGB))
+        exit(1)
+
+    
     fetchdir = os.path.join(tempdir,'honpatch')
     cleanupdir = tempdir
     tempdir = os.path.join(tempdir,'hon')
