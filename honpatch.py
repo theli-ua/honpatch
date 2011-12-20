@@ -4,6 +4,7 @@
 def cleanup_callback(a,b):
     exit(1)
     pass
+from sys import exit
 import xml.etree.ElementTree as etree
 from threading import Thread
 from time import sleep
@@ -347,9 +348,17 @@ def main():
         import tempfile
         tempdir = tempfile.mkdtemp()
     _neededGB = 1.5
-    s = os.statvfs(tempdir)
-    if float(s.f_bavail * s.f_frsize) / ( pow(1024,3) ) < _neededGB:
-        print('Not enough free space at {0}, need at least {1}GB'.format(tempdir,_neededGB))
+    try:
+        s = os.statvfs(tempdir)
+        size = float(s.f_bavail * s.f_frsize)
+    except:
+        import ctypes
+        free_bytes = ctypes.c_ulonglong(0)
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(tempdir), None, None, ctypes.pointer(free_bytes))
+        size = float(free_bytes.value)
+    size /= pow(1024,3)
+    if size < _neededGB:
+        print('Not enough free space at {0}, need at least {1}GB, have {2}'.format(tempdir,_neededGB,size))
         exit(1)
 
     
