@@ -309,7 +309,7 @@ def main():
         if os.path.exists(mpath):
             curManifest = Manifest(xmlpath=mpath)
         else:
-            print ('manifest.xml not found in {0}'.format(parser.hondir))
+            print ('manifest.xml not found in {0}'.format(options.hondir))
     else:
         print('Source directory not set this will be a LOOONG time')
         if not options.os or not options.arch or not options.destdir:
