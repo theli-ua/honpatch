@@ -348,7 +348,7 @@ def main():
         tempdir = tempfile.mkdtemp()
     _neededGB = 1.5
     s = os.statvfs(tempdir)
-    if (s.f_bavail * s.f_frsize) / ( pow(1024,3) ) < _neededGB:
+    if float(s.f_bavail * s.f_frsize) / ( pow(1024,3) ) < _neededGB:
         print('Not enough free space at {0}, need at least {1}GB'.format(tempdir,_neededGB))
         exit(1)
 
@@ -436,12 +436,13 @@ def main():
         s2z = {}
         s2z_source = {}
         for f in files:
+            f = os.sep.join(f.split('/'))
             sys.stdout.write('{1}\rProcessing [{2}/{3}]{0}\r'.format(f,' '*prevlen,current,total))
             sys.stdout.flush()
             prevlen = len(f) + 30
             current += 1
 
-            path = f.split('.s2z/')
+            path = f.split('.s2z' + os.sep)
             if f in tofetch:
                 z = CoolZip(os.path.join(fetchdir,f + '.zip'))
                 if len(path) == 1:
