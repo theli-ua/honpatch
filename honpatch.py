@@ -436,6 +436,7 @@ def main():
         s2z = {}
         s2z_source = {}
         for f in files:
+            f_key = f
             f = os.sep.join(f.split('/'))
             sys.stdout.write('{1}\rProcessing [{2}/{3}]{0}\r'.format(f,' '*prevlen,current,total))
             sys.stdout.flush()
@@ -443,7 +444,7 @@ def main():
             current += 1
 
             path = f.split('.s2z' + os.sep)
-            if f in tofetch:
+            if f_key in tofetch:
                 z = CoolZip(os.path.join(fetchdir,f + '.zip'))
                 if len(path) == 1:
                     try:
