@@ -479,6 +479,8 @@ def main():
                     if path[0] not in s2z_source:
                         s2z_source[path[0]] = \
                             CoolZip(os.path.join(options.hondir,path[0] + '.s2z'))
+                    #for some reason this is needed on windows XP when the script is frozen
+                    path[1] = '/'.join(path[1].split(os.sep))
                     data = s2z_source[path[0]].read_raw(path[1])
 
             #now that we have data we need to insert it into proper place
