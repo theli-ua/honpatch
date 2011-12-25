@@ -164,7 +164,10 @@ def fetch(conn,conn2,retrycount,url,tempdir,version,path):
     path = os.path.join(tempdir,path)
     dpath = os.path.dirname(path)
     if not os.path.exists(dpath):
-        os.makedirs(dpath)
+        try:
+            os.makedirs(dpath)
+        except:
+            pass
     f=open('{0}.zip'.format(path),'wb')
     done = False
     connections = [conn,conn2]
@@ -248,6 +251,7 @@ class FetchThread( Thread ):
         self.conn2 = conn2
         self.queue = queue
         self.retrycount = retrycount
+        self.status = status
     def run(self):
         q = self.queue
         c = self.conn
@@ -262,7 +266,7 @@ class FetchThread( Thread ):
                     raise Exception('spam', 'eggs')
             except:
                 print('\nError fetching {0}\n'.format(task[-1]))
-                status.value = -1
+                self.status.value = -1
                 break
             q.task_done()
         self.conn.close()
